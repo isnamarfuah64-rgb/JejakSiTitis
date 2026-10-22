@@ -1,0 +1,940 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, getDocs, where } from 'firebase/firestore';
+import { BookOpen, CheckCircle, Lock, Play, CloudRain, Droplet, User, LogOut, Sun, Cloud, CloudSnow, Volume2, VolumeX, Award, ArrowRight, XCircle } from 'lucide-react';
+
+// Firebase Setup
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+    // Mock config for local testing if __firebase_config is not defined
+    apiKey: "mock-key", projectId: "mock-project",
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'jejak-si-titis';
+
+// Audio URLs
+const BGM_URL = "https://assets.mixkit.co/music/preview/mixkit-happy-times-158.mp3";
+const CORRECT_SFX = "https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3";
+const WRONG_SFX = "https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3";
+
+// Define Chapters Data based on the PDF
+const CHAPTERS = [
+    {
+        id: 1,
+        title: "Bab 1: Siklus Air, Air Tanah, dan Air Permukaan",
+        content: (
+            <div className="space-y-4">
+                <h3 className="text-xl font-bold text-blue-800">Pengertian Siklus Air</h3>
+                <p>Siklus air atau siklus hidrologi adalah perputaran air secara terus menerus dari bumi ke atmosfer lalu kembali lagi ke bumi. Air akan selalu ada di bumi karena adanya perputaran (daur) air.</p>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                    <h4 className="font-bold mb-2">Istilah Penting:</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                        <li><strong>Evaporasi (penguapan):</strong> air yang terkena panas sinar matahari kemudian berubah menjadi uap air.</li>
+                        <li><strong>Transpirasi:</strong> proses penguapan yang berasal dari tumbuhan, hewan, dan manusia.</li>
+                        <li><strong>Kondensasi (pengembunan):</strong> perubahan uap air menjadi titik-titik air dan membentuk awan.</li>
+                        <li><strong>Presipitasi:</strong> awan mengalami proses pencairan karena pengaruh suhu udara yang tinggi (hujan).</li>
+                        <li><strong>Infiltrasi:</strong> Air yang jatuh dan meresap ke dalam tanah menjadi air tanah.</li>
+                    </ul>
+                </div>
+                <h3 className="text-xl font-bold text-blue-800 mt-6">Jenis-Jenis Siklus Air</h3>
+                <ul className="list-decimal pl-5 space-y-2">
+                    <li><strong>Siklus Pendek:</strong> Terjadi di laut. Air laut menguap (evaporasi), membentuk awan (kondensasi), lalu hujan (presipitasi) di laut.</li>
+                    <li><strong>Siklus Sedang:</strong> Air menguap (evaporasi), membentuk awan, awan tertiup angin ke daratan (adveksi), hujan di darat (presipitasi), air meresap ke tanah (infiltrasi) lalu mengalir kembali ke laut.</li>
+                    <li><strong>Siklus Panjang:</strong> Terjadi di iklim subtropis/pegunungan. Penguapan (evaporasi) membentuk awan kristal es, turun sebagai salju, membentuk gletser, mencair jadi aliran sungai kembali ke laut.</li>
+                </ul>
+                <h3 className="text-xl font-bold text-blue-800 mt-6">Air Tanah & Air Permukaan</h3>
+                <p><strong>Air Tanah:</strong> Air yang mengalir di bawah permukaan tanah. Biasanya lebih bersih dan jernih karena tersaring lapisan tanah.</p>
+                <p><strong>Air Permukaan:</strong> Air hujan yang tidak dapat diserap tanah, mengalir di atas permukaan (sungai, danau). Biasanya lebih kotor.</p>
+            </div>
+        )
+    },
+    {
+        id: 2,
+        title: "Bab 2: Faktor yang Mempengaruhi Siklus Air",
+        content: (
+            <div className="space-y-4">
+                <h3 className="text-xl font-bold text-red-700">Kegiatan yang Menghambat Siklus Air:</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                    <li><strong>Penebangan Pohon:</strong> Mengurangi resapan air tanah, menyebabkan kekeringan di musim kemarau.</li>
+                    <li><strong>Pencemaran Air:</strong> Limbah rumah tangga dan pabrik (minyak) menghambat proses penguapan (evaporasi).</li>
+                    <li><strong>Kurangnya Daerah Resapan Air:</strong> Penutupan jalan dengan aspal/beton menghalangi air meresap, bisa menyebabkan banjir dan mengurangi penguapan.</li>
+                    <li><strong>Pemborosan Air:</strong> Penggunaan air berlebihan dapat menyebabkan krisis air bersih.</li>
+                    <li><strong>Penggunaan Zat Kimia Berlebihan:</strong> Pestisida dapat mencemari air dan tanah.</li>
+                </ul>
+                <h3 className="text-xl font-bold text-green-700 mt-6">Kegiatan yang Mendukung Siklus Air:</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                    <li><strong>Reboisasi:</strong> Penanaman pohon kembali agar menjadi daerah resapan air.</li>
+                    <li><strong>Membuat Daerah Resapan Air:</strong> Membuat sumur resapan, biopori, danau, atau bendungan.</li>
+                    <li><strong>Menjaga Kebersihan Sungai:</strong> Tidak membuang sampah ke sungai agar aliran lancar.</li>
+                    <li><strong>Mengelola Sampah:</strong> Mendaur ulang sampah agar tidak mencemari lingkungan.</li>
+                    <li><strong>Menggunakan Air dengan Bijak:</strong> Mematikan kran jika tidak digunakan.</li>
+                </ul>
+            </div>
+        )
+    },
+    {
+        id: 3,
+        title: "Bab 3: Dampak Siklus Air terhadap Bumi",
+        content: (
+            <div className="space-y-4">
+                <p>Siklus air sangat memengaruhi kelangsungan hidup makhluk hidup di muka bumi ini.</p>
+                <div className="bg-blue-100 p-4 rounded-xl">
+                    <p>Siklus air akan memengaruhi <strong>suhu, kelembaban, curah hujan, dan iklim</strong> di bumi.</p>
+                    <ul className="list-disc pl-5 mt-2">
+                        <li>Uap air hasil evaporasi memengaruhi kelembaban dan suhu. Uap air mengurangi suhu di bumi sehingga tidak terlalu panas.</li>
+                        <li>Air yang turun dari hujan sangat dibutuhkan makhluk hidup untuk dapat bertahan hidup.</li>
+                        <li>Banyaknya penguapan dalam siklus air memengaruhi banyaknya curah hujan yang turun di bumi.</li>
+                    </ul>
+                </div>
+            </div>
+        )
+    },
+    {
+        id: 4,
+        title: "Bab 4: Manfaat Air Bersih",
+        content: (
+            <div className="space-y-4">
+                <p>Seluruh makhluk hidup sangat membutuhkan air.</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="bg-white p-4 rounded-xl border-2 border-blue-200 shadow-sm text-center">
+                        <User className="mx-auto text-blue-500 mb-2" size={32} />
+                        <h4 className="font-bold text-blue-800">Bagi Manusia</h4>
+                        <ul className="text-sm mt-2 text-left list-disc pl-4">
+                            <li>Mandi dan minum</li>
+                            <li>Mencuci pakaian & alat</li>
+                            <li>Memasak</li>
+                            <li>Pertanian & listrik</li>
+                        </ul>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border-2 border-green-200 shadow-sm text-center">
+                        <span className="text-3xl block mb-2">🐾</span>
+                        <h4 className="font-bold text-green-800">Bagi Hewan</h4>
+                        <ul className="text-sm mt-2 text-left list-disc pl-4">
+                            <li>Untuk minum</li>
+                            <li>Membersihkan tubuh</li>
+                            <li>Sebagai tempat hidup (habitat)</li>
+                        </ul>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border-2 border-green-400 shadow-sm text-center">
+                        <span className="text-3xl block mb-2">🌿</span>
+                        <h4 className="font-bold text-green-900">Bagi Tumbuhan</h4>
+                        <ul className="text-sm mt-2 text-left list-disc pl-4">
+                            <li>Membantu proses fotosintesis</li>
+                            <li>Menyalurkan zat hara dari akar</li>
+                            <li>Membersihkan daun dari debu</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        )
+    },
+    {
+        id: 5,
+        title: "Bab 5: Cara Menjaga Ketersediaan Air Bersih",
+        content: (
+            <div className="space-y-4">
+                <p>Walaupun air selalu ada karena siklus, kita harus menggunakannya dengan bijak agar tidak krisis air bersih.</p>
+                <div className="bg-cyan-50 p-4 rounded-xl border-2 border-cyan-200">
+                    <ul className="list-disc pl-5 space-y-2">
+                        <li><strong>Menutup kran air</strong> setelah digunakan agar tidak terbuang percuma.</li>
+                        <li><strong>Mencuci banyak pakaian</strong> secara bersamaan untuk menghemat air.</li>
+                        <li><strong>Menggunakan air bekas cucian</strong> beras atau sayur untuk menyiram tanaman.</li>
+                        <li><strong>Tidak mencuci kendaraan</strong> setiap hari, cukup dilap jika berdebu.</li>
+                        <li><strong>Perbaiki saluran air</strong> yang rusak atau bocor.</li>
+                        <li><strong>Membuat sumur resapan</strong> (biopori) untuk menampung air hujan.</li>
+                        <li><strong>Tidak menutup permukaan tanah</strong> sepenuhnya dengan aspal/beton.</li>
+                        <li><strong>Menanam tumbuhan</strong> di lahan kosong.</li>
+                    </ul>
+                </div>
+            </div>
+        )
+    }
+];
+
+const QUIZ_QUESTIONS = [
+    {
+        question: "Proses menguapnya air laut karena terkena panas sinar matahari disebut...",
+        options: ["Presipitasi", "Evaporasi", "Kondensasi", "Infiltrasi"],
+        answer: "Evaporasi",
+        explanation: "Evaporasi adalah proses di mana air dari laut, sungai, dan danau menguap karena panas matahari."
+    },
+    {
+        question: "Perubahan uap air menjadi titik-titik air dan membentuk awan disebut...",
+        options: ["Kondensasi", "Transpirasi", "Evaporasi", "Presipitasi"],
+        answer: "Kondensasi",
+        explanation: "Kondensasi atau pengembunan terjadi ketika uap air naik ke tempat yang dingin dan berubah menjadi titik-titik air pembentuk awan."
+    },
+    {
+        question: "Jatuhnya titik-titik air dari awan ke permukaan bumi (hujan) disebut...",
+        options: ["Adveksi", "Evaporasi", "Presipitasi", "Infiltrasi"],
+        answer: "Presipitasi",
+        explanation: "Presipitasi terjadi saat awan sudah terlalu berat menampung air, sehingga air jatuh ke bumi, biasanya dalam bentuk hujan."
+    },
+    {
+        question: "Kegiatan manusia berikut ini yang dapat menghambat siklus air adalah...",
+        options: ["Melakukan reboisasi", "Membuat biopori", "Penebangan pohon secara liar", "Menghemat air"],
+        answer: "Penebangan pohon secara liar",
+        explanation: "Penebangan pohon mengurangi daerah resapan air, sehingga air hujan sulit meresap ke dalam tanah (infiltrasi)."
+    },
+    {
+        question: "Air yang mengalir di bawah permukaan tanah dan biasanya lebih bersih karena tersaring lapisan tanah disebut...",
+        options: ["Air permukaan", "Air tanah", "Air hujan", "Air laut"],
+        answer: "Air tanah",
+        explanation: "Air tanah meresap melalui celah-celah tanah dan batuan, sehingga kotoran tersaring secara alami membuatnya lebih bersih."
+    }
+];
+
+// --- Mascot Component ---
+const Mascot = ({ emotion = 'happy', size = 'normal', message }) => {
+    const sizeClasses = size === 'large' ? 'w-32 h-32' : size === 'small' ? 'w-16 h-16' : 'w-24 h-24';
+    
+    return (
+        <div className={`relative flex flex-col items-center ${sizeClasses} animate-bounce`}>
+            {message && (
+                <div className="absolute bottom-full mb-2 bg-white px-3 py-1 rounded-xl shadow-md text-sm font-bold text-blue-600 border border-blue-200 whitespace-nowrap z-10">
+                    {message}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white"></div>
+                </div>
+            )}
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
+                <path d="M50 10 C 20 40, 10 60, 10 75 A 40 40 0 1 0 90 75 C 90 60, 80 40, 50 10 Z" fill="#38BDF8" />
+                <path d="M50 10 C 20 40, 10 60, 10 75 A 40 40 0 1 0 90 75 C 90 60, 80 40, 50 10 Z" fill="url(#dropGrad)" />
+                <defs>
+                    <radialGradient id="dropGrad" cx="30%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor="white" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="transparent" stopOpacity="0" />
+                    </radialGradient>
+                </defs>
+                {emotion === 'happy' && (
+                    <g>
+                        <circle cx="35" cy="65" r="5" fill="#0F172A" />
+                        <circle cx="65" cy="65" r="5" fill="#0F172A" />
+                        <path d="M 40 75 Q 50 85 60 75" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" />
+                        <circle cx="25" cy="70" r="4" fill="#FCA5A5" opacity="0.6"/>
+                        <circle cx="75" cy="70" r="4" fill="#FCA5A5" opacity="0.6"/>
+                    </g>
+                )}
+                {emotion === 'sad' && (
+                    <g>
+                        <path d="M 30 65 Q 35 60 40 65" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" />
+                        <path d="M 60 65 Q 65 60 70 65" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" />
+                        <path d="M 40 80 Q 50 70 60 80" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" />
+                    </g>
+                )}
+                 {emotion === 'excited' && (
+                    <g>
+                        <path d="M 30 60 L 35 65 L 40 60" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M 60 60 L 65 65 L 70 60" stroke="#0F172A" strokeWidth="3" fill="transparent" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M 40 75 Q 50 90 60 75 Z" fill="#0F172A" />
+                        <path d="M 45 80 Q 50 85 55 80 Z" fill="#EF4444" />
+                    </g>
+                )}
+            </svg>
+        </div>
+    );
+};
+
+export default function App() {
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [role, setRole] = useState('siswa'); // 'siswa' or 'guru'
+    const [authError, setAuthError] = useState('');
+
+    const [currentChapter, setCurrentChapter] = useState(1);
+    const [quizMode, setQuizMode] = useState(false);
+    const [quizScore, setQuizScore] = useState(0);
+    const [students, setStudents] = useState([]);
+    const [showCertificate, setShowCertificate] = useState(false);
+    
+    // Audio state
+    const [isMuted, setIsMuted] = useState(false);
+    const bgmRef = useRef(null);
+    const correctAudioRef = useRef(null);
+    const wrongAudioRef = useRef(null);
+
+    // Initialize Audio
+    useEffect(() => {
+        bgmRef.current = new Audio(BGM_URL);
+        bgmRef.current.loop = true;
+        bgmRef.current.volume = 0.2;
+
+        correctAudioRef.current = new Audio(CORRECT_SFX);
+        correctAudioRef.current.volume = 0.6;
+
+        wrongAudioRef.current = new Audio(WRONG_SFX);
+        wrongAudioRef.current.volume = 0.6;
+
+        return () => {
+            if (bgmRef.current) {
+                bgmRef.current.pause();
+                bgmRef.current = null;
+            }
+        };
+    }, []);
+
+    const toggleMute = () => {
+        setIsMuted(!isMuted);
+        if (bgmRef.current) {
+            if (!isMuted) {
+                bgmRef.current.pause();
+            } else {
+                bgmRef.current.play().catch(e => console.log("Audio play prevented:", e));
+            }
+        }
+    };
+
+    const playSfx = (type) => {
+        if (isMuted) return;
+        if (type === 'correct' && correctAudioRef.current) {
+            correctAudioRef.current.currentTime = 0;
+            correctAudioRef.current.play().catch(e => console.log(e));
+        } else if (type === 'wrong' && wrongAudioRef.current) {
+            wrongAudioRef.current.currentTime = 0;
+            wrongAudioRef.current.play().catch(e => console.log(e));
+        }
+    };
+
+    // Initialize Auth
+    useEffect(() => {
+        const initAuth = async () => {
+            // We use standard email/password auth for this app to support roles
+            // Only try custom token if it's explicitly provided (usually in the immersive env, but we want distinct users here)
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token && !user) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } catch (e) {
+                    console.error("Custom token auth failed", e);
+                }
+            }
+            setLoading(false);
+        };
+        initAuth();
+
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            setUser(currentUser);
+            if (currentUser) {
+                // Fetch user data to know role
+                const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                
+                if (userDocSnap.exists()) {
+                    setUserData(userDocSnap.data());
+                } else if (currentUser.isAnonymous) {
+                     // Fallback for anonymous users from environment
+                     setUserData({ name: 'Guest', role: 'siswa', progress: 1, maxChapter: 1, quizScore: 0 });
+                }
+            } else {
+                setUserData(null);
+            }
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Fetch Students Data for Guru
+    useEffect(() => {
+        if (!user || !userData || userData.role !== 'guru') return;
+
+        const usersQuery = query(collection(db, 'artifacts', appId, 'users'), where('role', '==', 'siswa'));
+        
+        const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
+            const studentData = [];
+            snapshot.forEach((doc) => {
+                studentData.push({ id: doc.id, ...doc.data() });
+            });
+            setStudents(studentData);
+        }, (error) => {
+            console.error("Error fetching students: ", error);
+        });
+
+        return () => unsubscribe();
+    }, [user, userData]);
+
+    const handleAuth = async (e) => {
+        e.preventDefault();
+        setAuthError('');
+        setLoading(true);
+        try {
+            if (authMode === 'register') {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const newUser = userCredential.user;
+                // Create user profile
+                await setDoc(doc(db, 'artifacts', appId, 'users', newUser.uid), {
+                    name,
+                    email,
+                    role,
+                    progress: 1, // Current reading chapter
+                    maxChapter: 1, // Highest unlocked chapter
+                    quizScore: 0,
+                    completed: false
+                });
+            } else {
+                await signInWithEmailAndPassword(auth, email, password);
+            }
+        } catch (error) {
+            setAuthError(error.message);
+        }
+        setLoading(false);
+    };
+
+    const handleLogout = async () => {
+        await signOut(auth);
+        setQuizMode(false);
+        setCurrentChapter(1);
+        setShowCertificate(false);
+        if (bgmRef.current) bgmRef.current.pause();
+    };
+
+    const markChapterComplete = async () => {
+        if (!user || userData.role !== 'siswa') return;
+        
+        const nextChapter = currentChapter + 1;
+        const newMaxChapter = Math.max(userData.maxChapter, nextChapter);
+        
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid), {
+                progress: nextChapter,
+                maxChapter: newMaxChapter > 5 ? 5 : newMaxChapter,
+                completed: nextChapter > 5
+            });
+            
+            if (nextChapter <= 5) {
+                setCurrentChapter(nextChapter);
+                setUserData({...userData, maxChapter: newMaxChapter, progress: nextChapter});
+            } else {
+                 setUserData({...userData, completed: true});
+            }
+        } catch (error) {
+            console.error("Error updating progress:", error);
+        }
+    };
+
+    const saveQuizScore = async (score) => {
+        if (!user || userData.role !== 'siswa') return;
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid), {
+                quizScore: score
+            });
+            setUserData({...userData, quizScore: score});
+        } catch (error) {
+            console.error("Error saving score:", error);
+        }
+    };
+
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center bg-blue-50 text-blue-800 font-bold flex-col gap-4">
+            <Mascot size="large" emotion="happy" />
+            <span>Memuat Jejak Si Titis...</span>
+        </div>;
+    }
+
+    // --- Authentication UI ---
+    if (!user || !userData) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-blue-200 to-cyan-400 flex items-center justify-center p-4">
+                <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden">
+                    <div className="absolute top-[-20px] right-[-20px] text-blue-100 opacity-50"><Cloud size={120} /></div>
+                    <div className="absolute bottom-[-20px] left-[-20px] text-blue-100 opacity-50"><CloudRain size={100} /></div>
+                    
+                    <div className="flex justify-center mb-4 relative z-10">
+                        <Mascot size="normal" emotion="happy" message="Halo! Aku Si Titis!" />
+                    </div>
+
+                    <div className="text-center mb-8 relative z-10">
+                        <h1 className="text-3xl font-extrabold text-blue-600 drop-shadow-sm flex items-center justify-center gap-2">
+                            <Droplet fill="currentColor" className="text-cyan-400"/>
+                            Jejak Si Titis
+                        </h1>
+                        <p className="text-blue-800 font-medium mt-2">Dari Awan ke Lautan</p>
+                        <p className="text-sm text-gray-500">Materi Siklus Air IPAS Kelas 5</p>
+                    </div>
+
+                    <form onSubmit={handleAuth} className="space-y-4 relative z-10">
+                        {authError && <div className="bg-red-100 text-red-700 p-2 rounded text-sm text-center">{authError}</div>}
+                        
+                        {authMode === 'register' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Nama</label>
+                                    <input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="Nama Lengkap" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Masuk Sebagai</label>
+                                    <div className="mt-2 flex gap-4">
+                                        <label className="inline-flex items-center">
+                                            <input type="radio" value="siswa" checked={role === 'siswa'} onChange={() => setRole('siswa')} className="text-blue-600 focus:ring-blue-500 h-4 w-4" />
+                                            <span className="ml-2 text-gray-700">Siswa</span>
+                                        </label>
+                                        <label className="inline-flex items-center">
+                                            <input type="radio" value="guru" checked={role === 'guru'} onChange={() => setRole('guru')} className="text-blue-600 focus:ring-blue-500 h-4 w-4" />
+                                            <span className="ml-2 text-gray-700">Guru</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Email</label>
+                            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="email@contoh.com" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" placeholder="Minimal 6 karakter" minLength={6} />
+                        </div>
+                        <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent rounded-full shadow-sm text-lg font-bold text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                            {authMode === 'login' ? 'Masuk' : 'Daftar'}
+                        </button>
+                    </form>
+
+                    <div className="mt-6 text-center relative z-10">
+                        <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                            {authMode === 'login' ? 'Belum punya akun? Daftar disini' : 'Sudah punya akun? Masuk'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Header Component ---
+    const Header = () => (
+        <header className="bg-white shadow-md rounded-b-3xl mb-6 p-4 flex justify-between items-center sticky top-0 z-50">
+            <div className="flex items-center gap-3">
+                <div className="bg-blue-100 p-2 rounded-full hidden sm:block">
+                    {userData.role === 'guru' ? <User className="text-blue-600" /> : <Mascot size="small" emotion="happy" />}
+                </div>
+                <div>
+                    <h2 className="font-bold text-lg text-blue-900 leading-tight">Halo, {userData.name}!</h2>
+                    <span className="text-xs font-semibold text-blue-500 uppercase tracking-wider">{userData.role}</span>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                 <button onClick={toggleMute} className="bg-slate-100 text-slate-600 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                    {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+                <button onClick={handleLogout} className="text-red-500 hover:bg-red-50 p-2 rounded-full flex items-center gap-1 text-sm font-bold transition-colors">
+                    <LogOut size={18} /> <span className="hidden sm:inline">Keluar</span>
+                </button>
+            </div>
+        </header>
+    );
+
+    // --- Guru Dashboard ---
+    if (userData.role === 'guru') {
+        return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+                <div className="max-w-4xl mx-auto p-4">
+                    <Header />
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-blue-800 flex items-center gap-2">
+                                <BookOpen className="text-blue-500" /> Daftar Progres Siswa
+                            </h2>
+                            <div className="text-sm font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                                Total Siswa: {students.length}
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-200">
+                                <thead className="bg-slate-50">
+                                    <tr>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nama Siswa</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Progres Materi</th>
+                                        <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider">Nilai Kuis</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-200">
+                                    {students.length === 0 ? (
+                                        <tr><td colSpan="4" className="px-6 py-8 text-center text-slate-500 italic">Belum ada siswa yang mendaftar.</td></tr>
+                                    ) : (
+                                        students.map((student) => (
+                                            <tr key={student.id} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{student.name}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center">
+                                                        <div className="w-full bg-slate-200 rounded-full h-2.5 mr-2 max-w-[100px]">
+                                                            <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${(Math.min(student.maxChapter, 5) / 5) * 100}%` }}></div>
+                                                        </div>
+                                                        <span className="text-xs font-medium text-slate-600">Bab {Math.min(student.maxChapter, 5)}/5</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    {student.completed ? 
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Selesai</span> :
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Belajar</span>
+                                                    }
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center font-bold text-lg">
+                                                    {student.quizScore > 0 ? (
+                                                        <span className={student.quizScore >= 80 ? "text-green-600" : "text-blue-600"}>{student.quizScore}</span>
+                                                    ) : (
+                                                        <span className="text-slate-300">-</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Siswa Kuis Component ---
+    const Quiz = () => {
+        const [currentQ, setCurrentQ] = useState(0);
+        const [score, setScore] = useState(0);
+        const [showResult, setShowResult] = useState(false);
+        const [userAnswers, setUserAnswers] = useState([]);
+        const [showExplanation, setShowExplanation] = useState(false);
+
+        // Start BGM on quiz start if not muted
+        useEffect(() => {
+            if (!isMuted && bgmRef.current && bgmRef.current.paused) {
+                bgmRef.current.play().catch(e => console.log(e));
+            }
+        }, []);
+
+        const handleAnswer = (selected) => {
+            const isCorrect = selected === QUIZ_QUESTIONS[currentQ].answer;
+            
+            if (isCorrect) {
+                setScore(score + 20);
+                playSfx('correct');
+            } else {
+                playSfx('wrong');
+            }
+
+            const newUserAnswers = [...userAnswers, {
+                questionIdx: currentQ,
+                selectedAnswer: selected,
+                isCorrect: isCorrect
+            }];
+            setUserAnswers(newUserAnswers);
+            
+            if (currentQ < QUIZ_QUESTIONS.length - 1) {
+                setCurrentQ(currentQ + 1);
+            } else {
+                const finalScore = score + (isCorrect ? 20 : 0);
+                saveQuizScore(finalScore);
+                setShowResult(true);
+            }
+        };
+
+        if (showExplanation) {
+            return (
+                <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border-4 border-yellow-200 max-w-3xl mx-auto">
+                     <div className="flex items-center gap-4 mb-6 border-b-2 border-slate-100 pb-4">
+                        <Mascot size="normal" emotion="happy" />
+                        <div>
+                            <h2 className="text-2xl font-extrabold text-slate-800">Pembahasan Kuis</h2>
+                            <p className="text-slate-500">Mari belajar dari kesalahan agar lebih pintar!</p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+                        {userAnswers.filter(a => !a.isCorrect).map((ans, idx) => {
+                            const q = QUIZ_QUESTIONS[ans.questionIdx];
+                            return (
+                                <div key={idx} className="bg-red-50 p-4 rounded-xl border border-red-100">
+                                    <h4 className="font-bold text-slate-800 mb-2">{q.question}</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                                        <div className="bg-white p-3 rounded-lg border border-red-200 flex items-start gap-2">
+                                            <XCircle className="text-red-500 shrink-0 mt-0.5" size={18}/>
+                                            <div>
+                                                <div className="text-xs text-slate-400 font-bold uppercase">Jawabanmu</div>
+                                                <div className="text-red-700">{ans.selectedAnswer}</div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-green-200 flex items-start gap-2">
+                                            <CheckCircle className="text-green-500 shrink-0 mt-0.5" size={18}/>
+                                            <div>
+                                                <div className="text-xs text-slate-400 font-bold uppercase">Jawaban Benar</div>
+                                                <div className="text-green-700">{q.answer}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                                        <strong>Penjelasan:</strong> {q.explanation}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    
+                    <div className="mt-8 flex justify-center gap-4">
+                        <button onClick={() => setShowExplanation(false)} className="bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-full hover:bg-slate-300 transition-colors">
+                            Kembali ke Hasil
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        if (showResult) {
+            const hasWrongAnswers = userAnswers.some(a => !a.isCorrect);
+            const finalScore = userData.quizScore || score;
+            const mascotEmotion = finalScore >= 80 ? 'excited' : finalScore >= 60 ? 'happy' : 'sad';
+
+            return (
+                <div className="bg-white rounded-3xl shadow-xl p-8 text-center border-4 border-blue-200 max-w-2xl mx-auto">
+                    <div className="flex justify-center mb-6">
+                        <Mascot size="large" emotion={mascotEmotion} />
+                    </div>
+                    <h2 className="text-3xl font-extrabold text-blue-800 mb-2">Kuis Selesai!</h2>
+                    <p className="text-lg text-slate-600 mb-6">Kamu telah menyelesaikan tantangan Jejak Si Titis.</p>
+                    
+                    <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-cyan-500 mb-8">
+                        {finalScore} <span className="text-2xl text-slate-400">/ 100</span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                        {hasWrongAnswers && (
+                            <button onClick={() => setShowExplanation(true)} className="bg-yellow-100 text-yellow-700 font-bold py-3 px-6 rounded-full hover:bg-yellow-200 transition-colors border-2 border-yellow-300">
+                                Lihat Pembahasan
+                            </button>
+                        )}
+                        <button onClick={() => { setQuizMode(false); setShowCertificate(true); }} className="bg-blue-500 text-white font-bold py-3 px-6 rounded-full hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 shadow-lg">
+                            <Award /> Lihat Sertifikat
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        const q = QUIZ_QUESTIONS[currentQ];
+        return (
+            <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border-4 border-cyan-200 relative overflow-hidden">
+                 <div className="absolute top-0 left-0 w-full h-2 bg-slate-100">
+                    <div className="h-full bg-cyan-400 transition-all duration-300" style={{width: `${((currentQ) / QUIZ_QUESTIONS.length) * 100}%`}}></div>
+                </div>
+                <div className="flex justify-between items-center mb-6 mt-4">
+                    <span className="bg-cyan-100 text-cyan-800 px-4 py-1 rounded-full font-bold text-sm">Pertanyaan {currentQ + 1} dari {QUIZ_QUESTIONS.length}</span>
+                </div>
+                <h3 className="text-xl md:text-2xl font-bold text-slate-800 mb-8 leading-relaxed">{q.question}</h3>
+                
+                <div className="space-y-3">
+                    {q.options.map((opt, idx) => (
+                        <button 
+                            key={idx}
+                            onClick={() => handleAnswer(opt)}
+                            className="w-full text-left p-4 rounded-xl border-2 border-slate-200 hover:border-cyan-400 hover:bg-cyan-50 transition-all font-medium text-slate-700 text-lg flex items-center group"
+                        >
+                            <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mr-4 group-hover:bg-cyan-400 group-hover:text-white font-bold transition-colors">
+                                {String.fromCharCode(65 + idx)}
+                            </span>
+                            {opt}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    // --- Certificate Component ---
+    const Certificate = () => {
+        return (
+            <div className="max-w-4xl mx-auto p-4">
+                <div className="bg-white p-8 md:p-12 rounded-lg shadow-2xl border-[16px] border-double border-cyan-500 relative text-center">
+                    {/* Corner Decorations */}
+                    <div className="absolute top-4 left-4 text-cyan-200"><Cloud size={64} /></div>
+                    <div className="absolute top-4 right-4 text-yellow-300"><Sun size={64} /></div>
+                    
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2">
+                        <Mascot size="large" emotion="excited" />
+                    </div>
+
+                    <div className="mt-16 mb-8">
+                        <h1 className="text-4xl md:text-5xl font-black text-blue-900 uppercase tracking-widest mb-2 font-serif">Sertifikat Penghargaan</h1>
+                        <div className="w-64 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent mx-auto"></div>
+                    </div>
+
+                    <p className="text-xl text-slate-600 mb-4 italic">Diberikan Kepada:</p>
+                    
+                    <h2 className="text-4xl font-extrabold text-cyan-600 mb-8 border-b-2 border-slate-200 pb-2 inline-block px-12">
+                        {userData.name}
+                    </h2>
+
+                    <p className="text-lg text-slate-700 mb-8 max-w-2xl mx-auto leading-relaxed">
+                        Telah menyelesaikan petualangan belajar <strong>"Jejak Si Titis: Dari Awan Ke Lautan"</strong> dan memahami materi Siklus Air dengan baik.
+                    </p>
+
+                    <div className="flex justify-center items-center gap-8 mb-12">
+                        <div className="text-center">
+                            <div className="text-sm text-slate-500 uppercase font-bold mb-1">Nilai Kuis</div>
+                            <div className="text-4xl font-black text-blue-500">{userData.quizScore}</div>
+                        </div>
+                        <div className="h-16 w-px bg-slate-200"></div>
+                        <div className="text-center">
+                            <div className="text-sm text-slate-500 uppercase font-bold mb-1">Predikat</div>
+                            <div className="text-2xl font-bold text-green-500">
+                                {userData.quizScore >= 80 ? 'Sangat Baik' : userData.quizScore >= 60 ? 'Baik' : 'Cukup'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-end px-12 text-sm text-slate-500 font-bold">
+                        <div>
+                            <div className="border-b border-slate-400 w-32 mb-2"></div>
+                            Tanggal: {new Date().toLocaleDateString('id-ID')}
+                        </div>
+                        <div>
+                            <Award className="mx-auto text-yellow-500 mb-2" size={48} />
+                            Jejak Si Titis
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 text-center">
+                    <button onClick={() => setShowCertificate(false)} className="bg-blue-100 text-blue-700 font-bold py-3 px-8 rounded-full hover:bg-blue-200 transition-colors inline-flex items-center gap-2">
+                        <ArrowRight className="rotate-180" /> Kembali ke Beranda
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Siswa Dashboard ---
+    const maxUnlocked = userData.maxChapter || 1;
+    const activeChapterData = CHAPTERS.find(c => c.id === currentChapter);
+
+    return (
+        <div className="min-h-screen bg-blue-50 font-sans text-slate-800 pb-12 relative overflow-hidden">
+            {/* Background Decorations */}
+            <div className="fixed top-20 left-10 text-white opacity-40 mix-blend-overlay pointer-events-none"><Cloud size={150} /></div>
+            <div className="fixed top-40 right-10 text-white opacity-40 mix-blend-overlay pointer-events-none"><Sun size={120} /></div>
+            
+            {/* Floating Mascot Guide */}
+            {!quizMode && !showCertificate && (
+                <div className="fixed bottom-8 right-8 z-40 hidden md:block">
+                    <Mascot size="normal" emotion="happy" message={`Ayo pelajari Bab ${currentChapter}!`} />
+                </div>
+            )}
+
+            <div className="max-w-5xl mx-auto p-4 relative z-10">
+                <Header />
+
+                {showCertificate ? (
+                    <Certificate />
+                ) : quizMode ? (
+                    <Quiz />
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {/* Sidebar Navigation */}
+                        <div className="md:col-span-1 space-y-3">
+                            <h3 className="font-extrabold text-blue-900 mb-4 px-2 text-lg uppercase tracking-wide">Peta Perjalanan</h3>
+                            {CHAPTERS.map((chap) => {
+                                const isUnlocked = chap.id <= maxUnlocked;
+                                const isCompleted = chap.id < maxUnlocked || userData.completed;
+                                const isActive = currentChapter === chap.id;
+
+                                return (
+                                    <button
+                                        key={chap.id}
+                                        disabled={!isUnlocked}
+                                        onClick={() => setCurrentChapter(chap.id)}
+                                        className={`w-full text-left p-3 rounded-2xl flex items-center transition-all duration-300 ${
+                                            isActive ? 'bg-blue-500 text-white shadow-md transform scale-105' : 
+                                            isUnlocked ? 'bg-white text-slate-700 hover:bg-blue-100 border border-transparent hover:border-blue-200' : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mr-3 ${isActive ? 'bg-white text-blue-600' : isUnlocked ? 'bg-blue-100 text-blue-600' : 'bg-slate-300 text-slate-500'}`}>
+                                            {isCompleted ? <CheckCircle size={18} /> : (isUnlocked ? chap.id : <Lock size={16} />)}
+                                        </div>
+                                        <span className="font-bold text-sm leading-tight line-clamp-2">{chap.title.split(':')[0]}</span>
+                                    </button>
+                                );
+                            })}
+                            
+                            {/* Quiz Button */}
+                            <div className="pt-4 mt-4 border-t-2 border-blue-200 border-dashed">
+                                <button
+                                    disabled={!userData.completed}
+                                    onClick={() => setQuizMode(true)}
+                                    className={`w-full p-4 rounded-2xl flex items-center justify-center gap-2 font-black transition-all ${
+                                        userData.completed 
+                                        ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-lg hover:shadow-xl hover:scale-105 animate-pulse' 
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    {userData.completed ? <Play fill="currentColor" /> : <Lock size={20}/>}
+                                    KUIS GAME
+                                </button>
+                                {userData.completed && userData.quizScore > 0 && (
+                                     <button
+                                     onClick={() => setShowCertificate(true)}
+                                     className="w-full mt-2 p-3 rounded-2xl flex items-center justify-center gap-2 font-bold text-yellow-600 bg-yellow-100 hover:bg-yellow-200 transition-colors"
+                                 >
+                                     <Award size={18} /> Lihat Sertifikat
+                                 </button>
+                                )}
+                                {!userData.completed && (
+                                    <p className="text-xs text-center text-slate-500 mt-2 font-medium">Selesaikan semua bab untuk membuka kuis!</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Content Area */}
+                        <div className="md:col-span-3">
+                            <div className="bg-white rounded-3xl shadow-lg border-t-4 border-blue-400 overflow-hidden">
+                                <div className="p-6 md:p-8">
+                                    <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900 mb-6 border-b-2 border-blue-50 pb-4">
+                                        {activeChapterData.title}
+                                    </h1>
+                                    
+                                    <div className="prose prose-blue prose-lg max-w-none text-slate-700 leading-relaxed">
+                                        {activeChapterData.content}
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-blue-50 p-6 flex justify-end">
+                                    {currentChapter < 5 ? (
+                                        <button 
+                                            onClick={markChapterComplete}
+                                            disabled={currentChapter < maxUnlocked}
+                                            className={`py-3 px-8 rounded-full font-bold text-lg flex items-center gap-2 transition-all ${
+                                                currentChapter < maxUnlocked 
+                                                ? 'bg-green-100 text-green-700 cursor-default' 
+                                                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg animate-bounce'
+                                            }`}
+                                        >
+                                            {currentChapter < maxUnlocked ? (
+                                                <><CheckCircle /> Sudah Selesai</>
+                                            ) : (
+                                                <>Selesai Dibaca <Play size={18} fill="currentColor"/></>
+                                            )}
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={markChapterComplete}
+                                            disabled={userData.completed}
+                                            className={`py-3 px-8 rounded-full font-bold text-lg flex items-center gap-2 transition-all ${
+                                                userData.completed
+                                                ? 'bg-green-100 text-green-700 cursor-default' 
+                                                : 'bg-green-500 text-white hover:bg-green-600 hover:shadow-lg'
+                                            }`}
+                                        >
+                                            {userData.completed ? <><CheckCircle /> Semua Bab Selesai</> : <><CheckCircle /> Selesaikan Materi</>}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
